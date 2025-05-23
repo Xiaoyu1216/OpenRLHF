@@ -74,7 +74,7 @@ def compute_reward(
 
     return reward
 
-
+# This function computes the logsumexp operation (a numerically stable way to compute log(∑exp(x))) on a tensor in chunks to avoid memory issues with large inputs.
 def _logsumexp_by_chunk(logits: torch.Tensor, chunk_size: int = 1024) -> torch.Tensor:
     seq_len = logits.shape[0]
     logsumexp_values = torch.zeros((seq_len), device=logits.device, dtype=logits.dtype)
@@ -84,20 +84,30 @@ def _logsumexp_by_chunk(logits: torch.Tensor, chunk_size: int = 1024) -> torch.T
 
     return logsumexp_values
 
+# This function computes the log probabilities of target labels given logits, with optional temperature scaling, using memory-efficient methods.
 
 def log_probs_from_logits(logits: torch.Tensor, labels: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+    # Divides logits by temperature (in-place)
+    # Higher temperature → softer probability distribution, Lower temperature → sharper distribution
     if temperature != 1.0:
         logits.div_(temperature)
     # https://github.com/OpenRLHF/OpenRLHF/pull/718#issuecomment-2641081881
-    if logits.dtype in [torch.float32, torch.float64]:
+    if logits.dtype in [torch.float32, torch.float64]: # Special handling for full-precision floats, Uses more accurate but memory-intensive methods
         batch_dim = logits.shape[:-1]
         last_dim = logits.shape[-1]
         try:
+            # cross_entropy_loss: A high-performance fused kernel that computes:
+            # Log softmax (log(exp(x)/∑exp(x))), Negative log likelihood (-log(p_target)) in a single optimized operation
+            # cross_entropy_loss() returns tuple (nll_loss, log_softmax), extract output[0] which is the negative log likelihood
             from flash_attn.ops.triton.cross_entropy import cross_entropy_loss
 
             output = cross_entropy_loss(logits.reshape(-1, last_dim), labels.reshape(-1))
             log_probs_labels = -output[0].view(*batch_dim)
-        except ImportError:
+            
+        except ImportError: # Manual implementation of log probability calculation
+            # gather(dim=-1): Selects logits at label positions
+            # Example: For labels=[2] and logits=[[1,2,3]], extracts value 3
+            
             logits_labels = torch.gather(logits, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
             logsumexp_values = _logsumexp_by_chunk(logits.reshape(-1, last_dim))
             logsumexp_values = logsumexp_values.view(*batch_dim)
@@ -125,6 +135,9 @@ def masked_normalize(tensor: torch.Tensor, mask: torch.Tensor, dim: int = 1, eps
     var = masked_mean(mean_centered**2, mask, dim=dim)
     return mean_centered * var.clamp(min=eps).rsqrt()
 
+# Computes the Shannon entropy of a probability distribution derived from logits, which measures the "uncertainty" in model predictions.
+# Returns the computed entropy tensor with shape equal to logits.shape[:-1] (removes the last dimension).
+# Higher values means more uncertainty,Lower values → more confident predictions
 
 def compute_entropy(logits: torch.Tensor):
     pd = torch.nn.functional.softmax(logits, dim=-1)

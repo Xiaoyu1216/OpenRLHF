@@ -63,7 +63,11 @@ def compute_reward(
     #             last_reward[i][t] = r[i]
     #             break
     #
+    # fliplr() reverses the mask: [1,1,1,0,0] → [0,0,1,1,1]
+    # argmax() finds first 1 in reversed mask (original last valid position)
+    # By default, argmax() returns the first occurrence of the maximum value
     eos_indices = action_mask.size(1) - 1 - action_mask.long().fliplr().argmax(dim=1, keepdim=True)
+    # Creates zero tensor with same shape as kl, Places reward r only at the eos_indices positions
     last_reward = torch.zeros_like(kl).scatter_(dim=1, index=eos_indices, src=r.unsqueeze(1).to(kl.dtype))
 
     reward = last_reward + kl_reward

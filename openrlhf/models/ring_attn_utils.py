@@ -3,6 +3,13 @@ import torch.distributed as dist
 from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
 from flash_attn.utils.distributed import all_gather
 
+'''
+The flash_attn.bert_padding functions are specialized for efficient attention computation in transformer models, particularly when using FlashAttention. 
+index_first_axis is optimized for the common pattern of indexing into attention keys/values
+rearrange handles the specific dimension permutations common in attention computation
+
+'''
+
 RING_ATTN_GROUP = None
 
 
@@ -26,7 +33,7 @@ def reset_ring_attn_position_ids(start, end, packed_seq_lens):
         end: the end position
         packed_seq_lens: the sequence lengths of packed sequences
     """
-    position_ids = torch.zeros((1, end - start), dtype=torch.long, device=torch.cuda.current_device())
+    position_ids = torch.zeros((1, end - start), dtype=torch.long, device=torch.cuda.current_device()) # Shape: (1, end - start) (batch size 1, sequence length end-start)
     offset = 0
     for seqlen in packed_seq_lens:
         seq_start = max(offset, start)

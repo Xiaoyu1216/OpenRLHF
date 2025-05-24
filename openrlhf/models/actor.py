@@ -1,5 +1,11 @@
 from typing import Optional
 
+# torch.distributed: Utilities for multi-GPU training.
+# gather_and_pad_tensor: For gathering model outputs in multi-GPU settings.
+# unpad_and_slice_tensor: Slicing packed sequences for ring attention.
+# torch.compile(...): Optimizes the compute_entropy function using TorchDynamo.
+# LoraLayer: Used to locate LoRA layers for casting precision.
+
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -77,7 +83,7 @@ class Actor(nn.Module):
             else:
                 nf4_config = None
 
-            if use_liger_kernel:
+            if use_liger_kernel: # Choose kernel-accelerated transformer if required.
                 from liger_kernel.transformers import AutoLigerKernelForCausalLM
 
                 model_class = AutoLigerKernelForCausalLM
